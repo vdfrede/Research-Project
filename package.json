@@ -1,0 +1,23 @@
+{
+  "name": "research-project",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vdfrede/Research-Project.git"
+  },
+  "author": "Vibeke Damborg Frederiksen",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/vdfrede/Research-Project/issues"
+  },
+  "homepage": "https://github.com/vdfrede/Research-Project#readme",
+  "dependencies": {
+    "@notionhq/client": "^1.0.4",
+    "octokit": "^1.7.1"
+  }
+}
