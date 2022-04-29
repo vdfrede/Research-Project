@@ -18,6 +18,8 @@
   "homepage": "https://github.com/vdfrede/Research-Project#readme",
   "dependencies": {
     "@notionhq/client": "^1.0.4",
+    "dotenv": "^16.0.0",
+    "lodash": "^4.17.21",
     "octokit": "^1.7.1"
   }
 }
