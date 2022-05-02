@@ -17,6 +17,7 @@ const OPERATION_BATCH_SIZE = 10
 const gitHubFilesIdToNotionPageId = {}
 
 const files = new Map();
+let id = 0;
 
 
 setInitialGitHubToNotionIdMap().then(syncNotionDatabaseWithGitHub)
@@ -39,8 +40,8 @@ async function syncNotionDatabaseWithGitHub() {
   console.log("\nFetching files from Notion DB...")
   const files = await getGitHubRepository()
 
-  console.log(`Fetched ${files.length} files from GitHub repository.`)
-console.log(await files)
+  console.log(`Fetched ${files.size} files from GitHub repository.`)
+
   // Group files into those that need to be created or updated in the Notion database.
   const { pagesToCreate, pagesToUpdate } = getNotionOperations(files)
 
@@ -80,6 +81,7 @@ console.log(await files)
     return {
       pageId: page.id,
       fileNumber: page.properties["File number"].number,
+      
     }
   })
 }
@@ -88,8 +90,8 @@ console.log(await files)
  *
  * @param {Array<{ number: number, title: string, state: "open" | "closed", comment_count: number, url: string }>} files
  * @returns {{
- *   pagesToCreate: Array<{ size: number, name: string, sha: string, totalCommits: number, totalAdditions: number, totalDeletions: number, additions: number, deletions: number, committer: string }>
- *   pagesToUpdate: Array<{ pageId: string, size: number, name: string, sha: string, totalCommits: number, totalAdditions: number, totalDeletions: number, additions: number, deletions: number, committer: string }} file }>
+ *   pagesToCreate: Array<{ size: number, name: string, sha: string, totalCommits: number, totalAdditions: number, totalDeletions: number, additions: number, deletions: number, committer: string, number: number }>
+ *   pagesToUpdate: Array<{ pageId: string, size: number, name: string, sha: string, totalCommits: number, totalAdditions: number, totalDeletions: number, additions: number, deletions: number, committer: string, number: number }} file }>
  * }}
  */
 function getNotionOperations(files) {
@@ -97,6 +99,7 @@ function getNotionOperations(files) {
   const pagesToUpdate = []
   for (const file of files) {
     const pageId = gitHubFilesIdToNotionPageId[file.number]
+
     if (pageId) {
       pagesToUpdate.push({
         ...file,
@@ -115,9 +118,10 @@ function getNotionOperations(files) {
  *
  * https://developers.notion.com/reference/post-page
  *
- * @param {Array<{ pageId: string, size: number, name: string, sha: string, totalCommits: number, totalAdditions: number, totalDeletions: number, additions: number, deletions: number, committer: string }} file
+ * @param {Array<{ pageId: string, size: number, name: string, sha: string, totalCommits: number, totalAdditions: number, totalDeletions: number, additions: number, deletions: number, committer: string , number: number}} pagesToCreate
  */
  async function createPages(pagesToCreate) {
+ 
   const pagesToCreateChunks = _.chunk(pagesToCreate, OPERATION_BATCH_SIZE)
   for (const pagesToCreateBatch of pagesToCreateChunks) {
     await Promise.all(
@@ -137,7 +141,7 @@ function getNotionOperations(files) {
  *
  * https://developers.notion.com/reference/patch-page
  *
- * @param {Array<{ pageId: string,size: number, name: string, sha: string, totalCommits: number, totalAdditions: number, totalDeletions: number, additions: number, deletions: number, committer: string }>} pagesToUpdate
+ * @param {Array<{ pageId: string,size: number, name: string, sha: string, totalCommits: number, totalAdditions: number, totalDeletions: number, additions: number, deletions: number, committer: string, number: number }>} pagesToUpdate
  */
  async function updatePages(pagesToUpdate) {
   const pagesToUpdateChunks = _.chunk(pagesToUpdate, OPERATION_BATCH_SIZE)
@@ -146,7 +150,7 @@ function getNotionOperations(files) {
       pagesToUpdateBatch.map(({ pageId, ...file }) =>
         notion.pages.update({
           page_id: pageId,
-          properties: getPropertiesFromFiles(file),
+          properties: getPropertiesFromFile(file),
         })
       )
     )
@@ -164,10 +168,10 @@ function getNotionOperations(files) {
 /**
  * Returns the GitHub file to conform to this database's schema properties.
  *
- * @param {{ size: number, name: string, sha: string, totalCommits: number, totalAdditions: number, totalDeletions: number, additions: number, deletions: number, committer: string }} file
+ * @param {{ size: number, name: string, sha: string, totalCommits: number, totalAdditions: number, totalDeletions: number, additions: number, deletions: number, committer: string, number: number}} file
  */
  function getPropertiesFromFile(file) {
-  const {    name, size, sha, totalCommits, totalAdditions, totalDeletions, committer, additions, deletions,} = file
+  const {    name, size, sha, totalCommits, totalAdditions, totalDeletions, committer, additions, deletions, number} = file
   return {
     Name: {
       title: [{ type: "text", text: { content: name } }],
@@ -197,13 +201,15 @@ function getNotionOperations(files) {
    },
    "Deletions": {
     number: deletions,
+   }, 
+   "File number": {
+     number,
    }
   }
 }
 
 // GitHub fetchers
 
-//getGitHubRepository();
 
 async function getGitHubRepository() {
   const iterator = octokit.paginate.iterator(
@@ -230,16 +236,18 @@ async function getGitHubRepository() {
           committer: "",
           additions: 0,
           deletions: 0,
+          number: id
         });
+        id = id + 1;
       }
     }
   }
 
-  return await getCommitData();
+  return await (await getCommitData()).values()
 }
 
 async function getCommitData() {
-  let files = []
+
   const iterator = octokit.paginate.iterator(
     `GET /repos/vdfrede/api_test/commits`,
     {
@@ -251,10 +259,11 @@ async function getCommitData() {
   );
   for await (const { data } of iterator) {
     for (const commit of data) {
-      files.push(await getCommit(commit));
-      
+      let file = await getCommit(commit)
+      files.set(file.name, file) 
     }
   }
+
   return files
 }
 
@@ -285,9 +294,9 @@ async function getCommit(commit) {
           totalAdditions: com.additions + file.totalAdditions,
           deletions: com.deletions,
           totalDeletions: com.deletions + file.totalDeletions,
+          number: file.number
         });
-        // console.log("file:")
-        // console.log(files.get(com.filename));
+  
       return files.get(file.name)
       }
     }
