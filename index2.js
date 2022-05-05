@@ -172,6 +172,7 @@ function getNotionOperations(files) {
  */
  function getPropertiesFromFile(file) {
   const {    name, size, sha, totalCommits, totalAdditions, totalDeletions, committer, additions, deletions, number} = file
+  console.log(file.name)
   return {
     Name: {
       title: [{ type: "text", text: { content: name } }],
@@ -223,9 +224,10 @@ async function getGitHubRepository() {
   );
   for await (const { data } of iterator) {
     // The console log below is to see everything we are fetching from GitHub
-    // console.log(data);
+
     for (const file of data) {
-      if (!files.pull_request && !files.has(file.name)) {
+      console.log(file.type)
+      if (!files.pull_request && !files.has(file.name) && file.type == "file" )  {
         files.set(file.name, {
           name: file.name,
           size: file.size,
@@ -259,8 +261,12 @@ async function getCommitData() {
   );
   for await (const { data } of iterator) {
     for (const commit of data) {
+  
+
       let file = await getCommit(commit)
+      if(file != undefined){
       files.set(file.name, file) 
+
     }
   }
 
@@ -279,7 +285,9 @@ async function getCommit(commit) {
   );
 
   for await (const { data } of iterator) {
+
     for (const com of data.files) {
+
       if (files.has(com.filename)) {
         let file = files.get(com.filename);
 
@@ -292,8 +300,8 @@ async function getCommit(commit) {
           totalCommits: file.totalCommits + 1,
           additions: com.additions,
           totalAdditions: com.additions + file.totalAdditions,
-          deletions: com.deletions,
-          totalDeletions: com.deletions + file.totalDeletions,
+          deletions: Math.abs(com.deletions),
+          totalDeletions: com.deletions + Math.abs(file.totalDeletions),
           number: file.number
         });
   
@@ -301,4 +309,4 @@ async function getCommit(commit) {
       }
     }
   }
-}
+}}
