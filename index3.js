@@ -85,8 +85,8 @@ async function getFilesFromNotionDatabase() {
  *
  * @param {Array<{ number: number, title: string, state: "open" | "closed", comment_count: number, url: string }>} files
  * @returns {{
- *   pagesToCreate: Array<{ filename: string, dir: string, sha: string, date: Date, additions: number, deletions: number, number: number}>
- *   pagesToUpdate: Array<{ pageId: string, filename: string, dir: string, sha: string, date: Date, additions: number, deletions: number, number: number}>
+ *   pagesToCreate: Array<{ filename: string, dir: string, sha: string, date: Date, additions: number, deletions: number, number: number, subfolders: string}>
+ *   pagesToUpdate: Array<{ pageId: string, filename: string, dir: string, sha: string, date: Date, additions: number, deletions: number, number: number, committer: string, subfolders: string }>
  * }}
  */
 function getNotionOperations(files) {
@@ -112,7 +112,7 @@ function getNotionOperations(files) {
  *
  * https://developers.notion.com/reference/post-page
  *
- * @param {Array<{ pageId: string,filename: string, dir: string, sha: string, date: Date, additions: number, deletions: number, number: number }>} pagesToCreate
+ * @param {Array<{ pageId: string,filename: string, dir: string, sha: string, date: Date, additions: number, deletions: number, number: number, committer: string, subfolders: string  }>} pagesToCreate
  */
 async function createPages(pagesToCreate) {
   const pagesToCreateChunks = _.chunk(pagesToCreate, OPERATION_BATCH_SIZE);
@@ -135,7 +135,7 @@ async function createPages(pagesToCreate) {
  *
  * https://developers.notion.com/reference/patch-page
  *
- * @param {Array<{ pageId: string,filename:string, dir:string, sha:string, date:Date, additions:number, deletions:number, number: number }>} pagesToUpdate
+ * @param {Array<{ pageId: string,filename:string, dir:string, sha:string, date:Date, additions:number, deletions:number, number: number, committer: string, subfolders: string  }>} pagesToUpdate
  */
 async function updatePages(pagesToUpdate) {
   const pagesToUpdateChunks = _.chunk(pagesToUpdate, OPERATION_BATCH_SIZE);
@@ -159,11 +159,10 @@ async function updatePages(pagesToUpdate) {
 /**
  * Returns the GitHub file to conform to this database's schema properties.
  *
- * @param {{ filename: string, dir: string, sha: string, date: Date, additions: number, deletions: number, number: number }} singleCommit
+ * @param {{ filename: string, dir: string, sha: string, date: Date, additions: number, deletions: number, number: number, committer: string, subfolders: string }} singleCommit
  */
 function getPropertiesFromFile(singleCommit) {
-  const { filename, dir,  sha, date, additions, deletions, number } = singleCommit
-  console.log(singleCommit)
+  const { filename, dir,  sha, date, additions, deletions, subfolders, number, committer } = singleCommit
   return {
     Name: {
       title: [{ type: "text", text: { content: filename } }],
@@ -186,8 +185,14 @@ function getPropertiesFromFile(singleCommit) {
     "Deletions": {
       number: deletions,
     },  
+    "Subfolders":{
+      rich_text: [{ type: "text", text: { content: subfolders} }],
+    },
      "Number": {
    number,
+    }, 
+    "Committer":{
+      rich_text: [{ type: "text", text: { content: committer} }],
     }
   }
 }
@@ -200,12 +205,14 @@ async function getCommitData() {
       repo: process.env.GITHUB_REPO_NAME,
       state: "all",
       per_page: 100,
+      since: "2022-04-15T00:00:00Z"
     }
   );
   for await (const { data } of iterator) {
     for (const commit of data) {
       let holder = await getCommit(commit);
      if(holder != undefined){
+       console.log(commit);
       commits.set(commit.sha + holder.filename, holder);
       //Should be used to go over the list of commits and then look at each commit
     }}
@@ -228,25 +235,29 @@ async function getCommit(commit) {
   for await (const { data } of iterator) {
     for (const com of data.files) {
       let dir = [];
-      if (com.filename.includes("/")) {
+      if (com.filename.includes("/") && com.filename.includes("src")) {
          dir = com.filename.split("/");
-
-      } else {
-        dir[0] = "Top";
-        dir[1] = com.filename;
-      }
+    
+       //else {
+      //   dir[0] = "Top";
+      //   dir[1] = com.filename;
+      // }
+      let subfolders = dir.slice(1, -1).join("/");
+ 
       let singleCommit = {
         dir: dir[0],
-        filename: dir[1],
+       subfolders: subfolders,
+        filename: dir[dir.length-1],
         sha: commit.sha,
         date: commit.commit.committer.date,
         additions: com.additions,
         deletions: Math.abs(com.deletions),
-        number: id
+        number: id,
+        committer: commit.commit.committer.name
       };
       id = id + 1
       return singleCommit;
-   
+    } 
     }
   }
 }
